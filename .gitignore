@@ -1,0 +1,43 @@
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
+
+# Backend Build & System
+backend/target/
+backend/out/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.class
+*.log
+*.ctxt
+.metadata/
+.recommenders/
+.classpath
+.project
+.settings/
+.springBeans
+.sts4-cache
+
+# Frontend Build & Dependencies
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+frontend/.eslintcache
+
+# Docker
+docker/data/
+
+# Environment configurations
+.env
+*.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Operating System Files
+desktop.ini
