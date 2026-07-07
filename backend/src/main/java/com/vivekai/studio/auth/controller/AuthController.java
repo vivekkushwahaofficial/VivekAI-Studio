@@ -26,7 +26,7 @@ import com.vivekai.studio.user.entity.User;
 import com.vivekai.studio.exception.ResourceNotFoundException;
 
 @RestController
-@RequestMapping("/api/v1/auth")
+@RequestMapping("/v1/auth")
 @RequiredArgsConstructor
 @Slf4j
 public class AuthController {
@@ -59,7 +59,8 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<ApiResponse<AuthResponse>> refreshAuthentication(@Valid @RequestBody TokenRefreshRequest refreshRequest) {
+    public ResponseEntity<ApiResponse<AuthResponse>> refreshAuthentication(
+            @Valid @RequestBody TokenRefreshRequest refreshRequest) {
         log.info("Received refresh token request");
         AuthResponse authResponse = authService.refresh(refreshRequest);
         return ResponseEntity.ok(ApiResponse.success(authResponse, "Token refreshed successfully"));

@@ -29,7 +29,7 @@ CREATE TABLE prompt_variables (
 
 -- Alter prompt_profiles to drop parameter columns (since they are now versioned)
 ALTER TABLE prompt_profiles 
-DROP COLUMN system_instruction,
+DROP COLUMN system_prompt,
 DROP COLUMN temperature,
 DROP COLUMN max_tokens,
 DROP COLUMN top_p,
