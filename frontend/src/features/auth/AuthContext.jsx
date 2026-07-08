@@ -1,25 +1,32 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import api from '../../services/api';
+import api, { setAccessToken } from '../../services/api';
 
 const AuthContext = createContext(undefined);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const updateToken = (newToken) => {
+    setToken(newToken);
+    setAccessToken(newToken);
+  };
 
   useEffect(() => {
     const initializeAuth = async () => {
-      const storedToken = localStorage.getItem('token');
-      if (storedToken) {
-        try {
-          const response = await api.get('/auth/me');
-          setUser(response.data.data);
-        } catch (error) {
-          logOutUser();
-        }
+      try {
+        // Attempt session recovery by requesting token rotation via HttpOnly refresh cookie
+        const response = await api.post('/auth/refresh');
+        const { accessToken, user: userData } = response.data.data;
+        updateToken(accessToken);
+        setUser(userData);
+      } catch (error) {
+        updateToken(null);
+        setUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     initializeAuth();
@@ -27,26 +34,24 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     const response = await api.post('/auth/login', { username, password });
-    const { accessToken } = response.data.data;
-    localStorage.setItem('token', accessToken);
-    setToken(accessToken);
-    
-    const profileResponse = await api.get('/auth/me');
-    setUser(profileResponse.data.data);
+    const { accessToken, user: userData } = response.data.data;
+    updateToken(accessToken);
+    setUser(userData);
   };
 
   const register = async (username, email, password) => {
     await api.post('/auth/register', { username, email, password });
   };
 
-  const logOutUser = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
-  };
-
-  const logout = () => {
-    logOutUser();
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch (err) {
+      console.error('API logout notification failed', err);
+    } finally {
+      updateToken(null);
+      setUser(null);
+    }
   };
 
   return (

@@ -1,6 +1,7 @@
 package com.vivekai.studio.workspace.service;
 
 import com.vivekai.studio.exception.ResourceNotFoundException;
+import org.springframework.security.access.AccessDeniedException;
 import com.vivekai.studio.user.entity.User;
 import com.vivekai.studio.user.repository.UserRepository;
 import com.vivekai.studio.workspace.dto.FolderRequest;
@@ -47,10 +48,14 @@ public class WorkspaceService {
     }
 
     @Transactional
-    public Folder createFolder(UUID workspaceId, FolderRequest request) {
-        log.info("Creating folder '{}' in workspace ID: {}", request.getName(), workspaceId);
+    public Folder createFolder(UUID workspaceId, FolderRequest request, UUID userId) {
+        log.info("Creating folder '{}' in workspace ID: {} for user: {}", request.getName(), workspaceId, userId);
         Workspace workspace = workspaceRepository.findById(workspaceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Workspace not found with ID: " + workspaceId));
+
+        if (!workspace.getOwner().getId().equals(userId)) {
+            throw new AccessDeniedException("User is not authorized to access this workspace");
+        }
 
         Folder folder = Folder.builder()
                 .name(request.getName())
@@ -60,8 +65,15 @@ public class WorkspaceService {
         return folderRepository.save(folder);
     }
 
-    public List<Folder> listFolders(UUID workspaceId) {
-        log.info("Fetching folders in workspace ID: {}", workspaceId);
+    public List<Folder> listFolders(UUID workspaceId, UUID userId) {
+        log.info("Fetching folders in workspace ID: {} for user: {}", workspaceId, userId);
+        Workspace workspace = workspaceRepository.findById(workspaceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Workspace not found with ID: " + workspaceId));
+
+        if (!workspace.getOwner().getId().equals(userId)) {
+            throw new AccessDeniedException("User is not authorized to access this workspace");
+        }
+
         return folderRepository.findByWorkspaceId(workspaceId);
     }
 }

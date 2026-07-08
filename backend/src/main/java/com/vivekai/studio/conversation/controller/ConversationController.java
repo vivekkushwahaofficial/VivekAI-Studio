@@ -3,13 +3,12 @@ package com.vivekai.studio.conversation.controller;
 import com.vivekai.studio.common.dto.ApiResponse;
 import com.vivekai.studio.conversation.entity.Conversation;
 import com.vivekai.studio.conversation.entity.Message;
-import com.vivekai.studio.conversation.repository.ConversationRepository;
-import com.vivekai.studio.conversation.repository.MessageRepository;
-import com.vivekai.studio.exception.ResourceNotFoundException;
+import com.vivekai.studio.conversation.service.ConversationService;
+import com.vivekai.studio.security.service.UserDetailsImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -27,60 +26,57 @@ import java.util.UUID;
 @Slf4j
 public class ConversationController {
 
-    private final ConversationRepository conversationRepository;
-    private final MessageRepository messageRepository;
+    private final ConversationService conversationService;
 
     @GetMapping("/workspace/{workspaceId}")
-    public ResponseEntity<ApiResponse<List<Conversation>>> getConversations(@PathVariable UUID workspaceId) {
-        log.info("Fetching conversations for workspace: {}", workspaceId);
-        List<Conversation> conversations = conversationRepository
-                .findByWorkspaceIdAndIsDeletedFalseOrderByLastMessageAtDesc(workspaceId);
+    public ResponseEntity<ApiResponse<List<Conversation>>> getConversations(
+            @PathVariable UUID workspaceId,
+            @AuthenticationPrincipal UserDetailsImpl userDetails
+    ) {
+        log.info("Fetching conversations for workspace: {} from user: {}", workspaceId, userDetails.getUsername());
+        List<Conversation> conversations = conversationService.getConversationsForWorkspace(workspaceId, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success(conversations, "Conversations retrieved successfully"));
     }
 
     @GetMapping("/{conversationId}/messages")
-    public ResponseEntity<ApiResponse<List<Message>>> getMessages(@PathVariable UUID conversationId) {
-        log.info("Fetching messages for conversation: {}", conversationId);
-        List<Message> messages = messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
+    public ResponseEntity<ApiResponse<List<Message>>> getMessages(
+            @PathVariable UUID conversationId,
+            @AuthenticationPrincipal UserDetailsImpl userDetails
+    ) {
+        log.info("Fetching messages for conversation: {} from user: {}", conversationId, userDetails.getUsername());
+        List<Message> messages = conversationService.getMessagesForConversation(conversationId, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success(messages, "Messages retrieved successfully"));
     }
 
     @PatchMapping("/{conversationId}/pin")
-    @Transactional
     public ResponseEntity<ApiResponse<Conversation>> pinConversation(
             @PathVariable UUID conversationId,
-            @RequestParam boolean pin
+            @RequestParam boolean pin,
+            @AuthenticationPrincipal UserDetailsImpl userDetails
     ) {
-        log.info("Toggling pin status of conversation: {} to: {}", conversationId, pin);
-        Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found with ID: " + conversationId));
-        conversation.setPinned(pin);
-        Conversation updated = conversationRepository.save(conversation);
+        log.info("Received request to pin conversation: {} to: {} from user: {}", conversationId, pin, userDetails.getUsername());
+        Conversation updated = conversationService.pinConversation(conversationId, pin, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success(updated, "Conversation pin toggled successfully"));
     }
 
     @PatchMapping("/{conversationId}/favorite")
-    @Transactional
     public ResponseEntity<ApiResponse<Conversation>> favoriteConversation(
             @PathVariable UUID conversationId,
-            @RequestParam boolean favorite
+            @RequestParam boolean favorite,
+            @AuthenticationPrincipal UserDetailsImpl userDetails
     ) {
-        log.info("Toggling favorite status of conversation: {} to: {}", conversationId, favorite);
-        Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found with ID: " + conversationId));
-        conversation.setFavorite(favorite);
-        Conversation updated = conversationRepository.save(conversation);
+        log.info("Received request to favorite conversation: {} to: {} from user: {}", conversationId, favorite, userDetails.getUsername());
+        Conversation updated = conversationService.favoriteConversation(conversationId, favorite, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success(updated, "Conversation favorite toggled successfully"));
     }
 
     @DeleteMapping("/{conversationId}")
-    @Transactional
-    public ResponseEntity<ApiResponse<Void>> softDeleteConversation(@PathVariable UUID conversationId) {
-        log.info("Soft deleting conversation: {}", conversationId);
-        Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found with ID: " + conversationId));
-        conversation.setDeleted(true);
-        conversationRepository.save(conversation);
+    public ResponseEntity<ApiResponse<Void>> softDeleteConversation(
+            @PathVariable UUID conversationId,
+            @AuthenticationPrincipal UserDetailsImpl userDetails
+    ) {
+        log.info("Received request to delete conversation: {} from user: {}", conversationId, userDetails.getUsername());
+        conversationService.deleteConversation(conversationId, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success("Conversation deleted successfully"));
     }
 }

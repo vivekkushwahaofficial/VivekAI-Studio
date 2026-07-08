@@ -24,6 +24,11 @@ import com.vivekai.studio.user.repository.UserRepository;
 import com.vivekai.studio.auth.mapper.UserMapper;
 import com.vivekai.studio.user.entity.User;
 import com.vivekai.studio.exception.ResourceNotFoundException;
+import com.vivekai.studio.exception.RefreshTokenException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.CookieValue;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 @RestController
 @RequestMapping("/v1/auth")
@@ -51,18 +56,100 @@ public class AuthController {
                 .body(ApiResponse.success(userResponse, "User registered successfully"));
     }
 
+    @Value("${vivekai.cookie.secure:false}")
+    private boolean cookieSecure;
+
+    @Value("${vivekai.jwt.refreshExpirationMs:604800000}")
+    private long refreshExpirationMs;
+
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<AuthResponse>> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<ApiResponse<AuthResponse>> authenticateUser(
+            @Valid @RequestBody LoginRequest loginRequest,
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse
+    ) {
         log.info("Received login request for username: {}", loginRequest.getUsername());
+        
+        // Populate authentic client headers to prevent spoofing
+        loginRequest.setIpAddress(servletRequest.getRemoteAddr());
+        loginRequest.setUserAgent(servletRequest.getHeader("User-Agent"));
+
         AuthResponse authResponse = authService.login(loginRequest);
+        
+        // Write refreshToken to HttpOnly cookie and remove from response JSON body
+        setRefreshTokenCookie(servletResponse, authResponse.getRefreshToken());
+        authResponse.setRefreshToken(null);
+
         return ResponseEntity.ok(ApiResponse.success(authResponse, "Login successful"));
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<AuthResponse>> refreshAuthentication(
-            @Valid @RequestBody TokenRefreshRequest refreshRequest) {
+            @CookieValue(name = "refreshToken", required = false) String cookieRefreshToken,
+            @RequestBody(required = false) TokenRefreshRequest refreshRequest,
+            HttpServletRequest servletRequest,
+            HttpServletResponse servletResponse
+    ) {
         log.info("Received refresh token request");
-        AuthResponse authResponse = authService.refresh(refreshRequest);
+        
+        String tokenToUse = cookieRefreshToken;
+        if (tokenToUse == null && refreshRequest != null) {
+            tokenToUse = refreshRequest.getRefreshToken();
+        }
+
+        if (tokenToUse == null || tokenToUse.trim().isEmpty()) {
+            throw new RefreshTokenException("Refresh token is missing");
+        }
+
+        // Prepare request details using authentic headers
+        String deviceName = refreshRequest != null ? refreshRequest.getDeviceName() : null;
+        String deviceType = refreshRequest != null ? refreshRequest.getDeviceType() : null;
+        String ipAddress = servletRequest.getRemoteAddr();
+        String userAgent = servletRequest.getHeader("User-Agent");
+
+        TokenRefreshRequest resolvedRequest = TokenRefreshRequest.builder()
+                .refreshToken(tokenToUse)
+                .deviceName(deviceName)
+                .deviceType(deviceType)
+                .ipAddress(ipAddress)
+                .userAgent(userAgent)
+                .build();
+
+        AuthResponse authResponse = authService.refresh(resolvedRequest);
+        
+        // Rotate the HttpOnly cookie and remove from response JSON body
+        setRefreshTokenCookie(servletResponse, authResponse.getRefreshToken());
+        authResponse.setRefreshToken(null);
+
         return ResponseEntity.ok(ApiResponse.success(authResponse, "Token refreshed successfully"));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @CookieValue(name = "refreshToken", required = false) String cookieRefreshToken,
+            HttpServletResponse servletResponse
+    ) {
+        log.info("Received logout request");
+        if (cookieRefreshToken != null) {
+            authService.logout(cookieRefreshToken);
+        }
+        
+        // Invalidate the client's HttpOnly cookie by setting Max-Age=0
+        String cookieHeader = "refreshToken=; Path=/api/v1/auth; Max-Age=0; HttpOnly; SameSite=Strict";
+        if (cookieSecure) {
+            cookieHeader += "; Secure";
+        }
+        servletResponse.setHeader("Set-Cookie", cookieHeader);
+        
+        return ResponseEntity.ok(ApiResponse.success(null, "Logout successful"));
+    }
+
+    private void setRefreshTokenCookie(HttpServletResponse response, String refreshToken) {
+        String cookieHeader = String.format("refreshToken=%s; Path=/api/v1/auth; Max-Age=%d; HttpOnly; SameSite=Strict", 
+                refreshToken, refreshExpirationMs / 1000);
+        if (cookieSecure) {
+            cookieHeader += "; Secure";
+        }
+        response.setHeader("Set-Cookie", cookieHeader);
     }
 }

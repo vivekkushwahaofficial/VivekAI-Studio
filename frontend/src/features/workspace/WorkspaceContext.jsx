@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../auth/AuthContext';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 const WorkspaceContext = createContext(undefined);
 
@@ -187,7 +188,7 @@ export const WorkspaceProvider = ({ children }) => {
           .join('&')
       : '';
 
-    let url = `/api/v1/chat/${activeWorkspace.id}/stream?prompt=${encodeURIComponent(prompt)}&providerCode=${provider}&modelName=${model}&token=${token}`;
+    let url = `/api/v1/chat/${activeWorkspace.id}/stream?prompt=${encodeURIComponent(prompt)}&providerCode=${provider}&modelName=${model}`;
     if (activeConversation) {
       url += `&conversationId=${activeConversation.id}`;
     }
@@ -198,43 +199,9 @@ export const WorkspaceProvider = ({ children }) => {
       url += `&${variablesParam}`;
     }
 
-    const eventSource = new EventSource(url);
+    const ctrl = new AbortController();
 
-    eventSource.addEventListener('START', () => {
-      setStreamingMessage('');
-    });
-
-    eventSource.addEventListener('TOKEN', (event) => {
-      const data = JSON.parse(event.data);
-      if (data && data.content) {
-        setStreamingMessage((prev) => prev + data.content);
-      }
-    });
-
-    eventSource.addEventListener('FINISH', () => {
-      setIsStreaming(false);
-      setStreamingMessage('');
-      eventSource.close();
-
-      loadConversations(activeWorkspace.id).then(() => {
-        if (!activeConversation) {
-          api.get(`/conversations/workspace/${activeWorkspace.id}`).then((res) => {
-            const list = res.data.data;
-            if (list.length > 0) {
-              setActiveConversation(list[0]);
-            }
-          });
-        } else {
-          loadMessages(activeConversation.id);
-        }
-      });
-    });
-
-    eventSource.addEventListener('ERROR', (event) => {
-      console.error('SSE Stream Error', event);
-      setIsStreaming(false);
-      eventSource.close();
-      
+    const addErrorMessageToChat = () => {
       const tempErrorMsg = {
         id: Math.random().toString(),
         role: 'ASSISTANT',
@@ -243,6 +210,67 @@ export const WorkspaceProvider = ({ children }) => {
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, tempErrorMsg]);
+    };
+
+    fetchEventSource(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      signal: ctrl.signal,
+      async onopen(response) {
+        if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
+          // Response is valid event stream
+        } else if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+          throw new Error("Client streaming request failed: " + response.statusText);
+        }
+      },
+      onmessage(msg) {
+        if (msg.event === 'START') {
+          setStreamingMessage('');
+        } else if (msg.event === 'TOKEN') {
+          try {
+            const data = JSON.parse(msg.data);
+            if (data && data.content) {
+              setStreamingMessage((prev) => prev + data.content);
+            }
+          } catch (e) {
+            console.error('Failed to parse token data', e);
+          }
+        } else if (msg.event === 'FINISH') {
+          setIsStreaming(false);
+          setStreamingMessage('');
+          ctrl.abort();
+
+          loadConversations(activeWorkspace.id).then(() => {
+            if (!activeConversation) {
+              api.get(`/conversations/workspace/${activeWorkspace.id}`).then((res) => {
+                const list = res.data.data;
+                if (list.length > 0) {
+                  setActiveConversation(list[0]);
+                }
+              });
+            } else {
+              loadMessages(activeConversation.id);
+            }
+          });
+        } else if (msg.event === 'ERROR') {
+          console.error('SSE error event received', msg.data);
+          setIsStreaming(false);
+          ctrl.abort();
+          addErrorMessageToChat();
+        }
+      },
+      onclose() {
+        setIsStreaming(false);
+      },
+      onerror(err) {
+        console.error('SSE request failed', err);
+        setIsStreaming(false);
+        ctrl.abort();
+        addErrorMessageToChat();
+        throw err; // Stop retry loops
+      }
     });
   };
 

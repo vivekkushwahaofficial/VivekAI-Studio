@@ -9,6 +9,7 @@ import com.vivekai.studio.auth.entity.RefreshToken;
 import com.vivekai.studio.auth.mapper.UserMapper;
 import com.vivekai.studio.exception.InvalidCredentialsException;
 import com.vivekai.studio.exception.RefreshTokenException;
+import com.vivekai.studio.exception.ResourceNotFoundException;
 import com.vivekai.studio.security.jwt.JwtService;
 import com.vivekai.studio.security.service.UserDetailsImpl;
 import com.vivekai.studio.user.entity.User;
@@ -113,5 +114,15 @@ public class AuthService {
                             .build();
                 })
                 .orElseThrow(() -> new RefreshTokenException("Refresh token is not in database. Please log in again."));
+    }
+
+    @Transactional
+    public void logout(String refreshToken) {
+        log.info("Revoking refresh token on logout");
+        try {
+            refreshTokenService.revokeToken(refreshToken);
+        } catch (ResourceNotFoundException e) {
+            log.warn("Logout requested with non-existent refresh token");
+        }
     }
 }

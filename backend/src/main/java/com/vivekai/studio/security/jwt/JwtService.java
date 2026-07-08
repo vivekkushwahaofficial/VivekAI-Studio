@@ -20,7 +20,7 @@ import java.util.function.Function;
 @Slf4j
 public class JwtService {
 
-    @Value("${vivekai.jwt.secret:dGhpcy1pcy1hLXNlY3JldC1rZXktd2l0aC1hdC1sZWFzdC0yNTYtYml0cy1mb3ItamR3dC1zaWduaW5n-vivekai-studio}")
+    @Value("${vivekai.jwt.secret}")
     private String jwtSecret;
 
     @Value("${vivekai.jwt.expirationMs:86400000}") // Default 24 Hours

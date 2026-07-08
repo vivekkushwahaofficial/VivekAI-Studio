@@ -54,18 +54,22 @@ public class WorkspaceController {
     @PostMapping("/{workspaceId}/folders")
     public ResponseEntity<ApiResponse<Folder>> createFolder(
             @PathVariable UUID workspaceId,
-            @Valid @RequestBody FolderRequest request
+            @Valid @RequestBody FolderRequest request,
+            @AuthenticationPrincipal UserDetailsImpl userDetails
     ) {
-        log.info("Received request to create folder in workspace: {}", workspaceId);
-        Folder folder = workspaceService.createFolder(workspaceId, request);
+        log.info("Received request to create folder in workspace: {} from user: {}", workspaceId, userDetails.getUsername());
+        Folder folder = workspaceService.createFolder(workspaceId, request, userDetails.getId());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success(folder, "Folder created successfully"));
     }
 
     @GetMapping("/{workspaceId}/folders")
-    public ResponseEntity<ApiResponse<List<Folder>>> listFolders(@PathVariable UUID workspaceId) {
-        log.info("Received request to list folders for workspace: {}", workspaceId);
-        List<Folder> folders = workspaceService.listFolders(workspaceId);
+    public ResponseEntity<ApiResponse<List<Folder>>> listFolders(
+            @PathVariable UUID workspaceId,
+            @AuthenticationPrincipal UserDetailsImpl userDetails
+    ) {
+        log.info("Received request to list folders for workspace: {} from user: {}", workspaceId, userDetails.getUsername());
+        List<Folder> folders = workspaceService.listFolders(workspaceId, userDetails.getId());
         return ResponseEntity.ok(ApiResponse.success(folders, "Folders retrieved successfully"));
     }
 }
