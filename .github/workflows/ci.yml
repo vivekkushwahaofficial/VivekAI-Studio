@@ -9,6 +9,21 @@ on:
 jobs:
   backend-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ai_workspace
+          POSTGRES_USER: ai_user
+          POSTGRES_PASSWORD: ai_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,6 +36,13 @@ jobs:
           cache: maven
 
       - name: Build and Test Backend
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: ai_workspace
+          DB_USER: ai_user
+          DB_PASSWORD: ai_password
+          JWT_SECRET: dGVzdF9zZWNyZXRfa2V5X2Zvcl9qd3Rfc2lnbmluZ19tdXN0X2JlX2F0X2xlYXN0XzMyX2J5dGVzX2xvbmc=
         run: |
           cd backend
           mvn clean test
