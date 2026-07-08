@@ -135,6 +135,26 @@ Open [http://localhost:3000](http://localhost:3000) to access the VivekAI Studio
 
 ---
 
+## 🔁 CI/CD Pipelines
+
+The repository contains separate CI configurations to ensure seamless build and test validation across both platforms:
+
+### 🐙 GitHub Actions
+*   **Workflow File**: [.github/workflows/ci.yml](file:///.github/workflows/ci.yml)
+*   **Trigger**: Runs automatically on every push or pull request to the `main` branch.
+*   **Jobs**:
+    *   `backend-test`: Sets up JDK 21, boots up a PostgreSQL 16 service container, runs Flyway database migrations, and executes the backend test suite with a test JWT key.
+    *   `frontend-test`: Sets up Node.js 20, installs dependencies, and runs the production build.
+
+### 🦊 GitLab CI/CD
+*   **Workflow File**: [.gitlab-ci.yml](file:///.gitlab-ci.yml)
+*   **Trigger**: Runs automatically on every push to the GitLab repository.
+*   **Jobs**:
+    *   `backend-test`: Replicates the backend testing stage using a `maven:3.9.6-eclipse-temurin-21` container, PostgreSQL service, and project-level Maven dependency caching.
+    *   `frontend-test`: Runs the frontend validation steps using a `node:20` image with package caching.
+
+---
+
 ## 🎨 UI Showcase
 
 The workspace dashboard features:
